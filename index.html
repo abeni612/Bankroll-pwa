@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e1e1e">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<title>Bankroll</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#1e1e1e;color:#d0d0d0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+nav{display:flex;border-bottom:1px solid #3a3a3a;position:sticky;top:0;background:#1e1e1e;padding-top:env(safe-area-inset-top)}
+nav button{flex:1;background:none;border:0;border-bottom:2px solid transparent;color:#b0b0b0;padding:14px 4px;font:inherit}
+nav button.on{color:#fff;border-bottom-color:#d0d0d0}
+main{max-width:560px;margin:0 auto;padding:16px}
+.c{border:1px solid #3a3a3a;border-radius:6px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;font-weight:600;margin:0 0 10px;color:#b0b0b0}
+.big{font-size:40px;font-weight:600;color:#fff;letter-spacing:-1px}
+.m{color:#b0b0b0;font-size:14px}
+input,select{width:100%;background:#262626;border:1px solid #444;color:#d0d0d0;border-radius:4px;padding:11px;font:inherit;margin:4px 0 10px}
+label{font-size:13px;color:#b0b0b0}
+button.b{background:#2c2c2c;border:1px solid #555;color:#d0d0d0;border-radius:4px;padding:10px 14px;font:inherit}
+.r{display:flex;gap:8px;flex-wrap:wrap}.r>*{flex:1}
+.row{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-top:1px solid #333;font-size:14px}
+.bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%}
+.g{color:#6fbf73}.l{color:#e06c6c}
+.out{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 12px}
+.out b{display:block;font-size:20px;color:#fff}
+.flex{display:flex;align-items:center;gap:16px}
+svg text{fill:#b0b0b0;font-size:9px}
+</style></head><body>
+<nav id="nav"></nav><main id="v"></main>
+<script>
+const K='bm1',$=s=>document.querySelector(s);
+let S=JSON.parse(localStorage.getItem(K)||'null')||{bank:0,cps:[],bets:[],pend:[],hist:[],set:{def:5,l1:25,l2:20,hide:false}};
+let tab='home',F={from:'',to:''},editId=null;
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const f2=n=>(+n).toFixed(2),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const dt=t=>new Date(t).toLocaleString([],{dateStyle:'short',timeStyle:'short'});
+const cls=n=>n>0?'g':n<0?'l':'';
+const sorted=()=>[...S.cps].sort((a,b)=>a.amt-b.amt);
+function active(){let a=null;for(const c of sorted())if(c.amt<=S.bank)a=c;return a}
+function streaks(){let ls=0,def=0,ws=0;
+ for(const b of S.bets){if(b.res=='Canceled')continue;
+  if(b.res=='Lost'){ls++;def+=b.stake;ws=0}
+  else{ws++;if(ls){def-=b.profit;if(def<=0){ls=0;def=0}}}}
+ return{ls,ws}}
+function rec(){const c=active(),{ls,ws}=streaks();
+ let p=c?c.pct:S.set.def;p=Math.max(0.1,p-(c&&c.dec?c.dec*ws:0));
+ const m=ls==0?1:ls==1?S.set.l1/100:S.set.l2/100;
+ return{stake:S.bank*p/100*m,pct:p*m,ls}}
+function settle(odds,stake,res,t){
+ const profit=res=='Win'?stake*(odds-1):res=='Lost'?-stake:0;
+ S.bank+=profit;t=t||Date.now();
+ S.bets.push({id:uid(),t,odds,stake,res,profit,after:S.bank});
+ S.hist.push({t,b:S.bank});save()}
+function nav(){$('#nav').innerHTML=[['home','Home'],['pend','Pending'+(S.pend.length?' ('+S.pend.length+')':'')],['hist','History'],['setup','Setup']]
+ .map(([k,n])=>`<button class="${tab==k?'on':''}" onclick="go('${k}')">${n}</button>`).join('')}
+function go(t){tab=t;render()}
+function render(){nav();$('#v').innerHTML=({home,pend,hist,setup})[tab]();if(tab=='home')upd();scrollTo(0,0)}
+function donut(w,l){const C=2*Math.PI*40,t=w+l,wl=t?w/t*C:0;
+ return`<svg width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="${t?'#e06c6c':'#444'}" stroke-width="12"/>
+ <circle cx="50" cy="50" r="40" fill="none" stroke="#6fbf73" stroke-width="12" stroke-dasharray="${wl} ${C}" transform="rotate(-90 50 50)"/>
+ <text x="50" y="55" text-anchor="middle" style="font-size:18px;fill:#fff">${t?Math.round(w/t*100)+'%':'-'}</text></svg>`}
+function home(){
+ const a=active(),nx=sorted().find(c=>c.amt>S.bank),from=a?a.amt:0;
+ let prog='<div class="m">No higher checkpoint set.</div>';
+ if(nx){const p=Math.max(0,Math.min(1,(S.bank-from)/(nx.amt-from)));
+  prog=`<div class="bar"><i style="width:${p*100}%;background:hsl(${210-210*p},65%,50%)"></i></div><div class="m">${Math.round(p*100)}% toward ${f2(nx.amt)} (${f2(nx.amt-S.bank)} to go)</div>`}
+ const st=S.bets.filter(b=>b.res!='Canceled'),w=st.filter(b=>b.res=='Win').length,l=st.length-w;
+ const recent=[...S.bets].reverse().slice(0,5).map(bRow).join('')||'<div class="m">No bets yet.</div>';
+ return`<div class="c"><div class="m">Bankroll</div><div class="big">${f2(S.bank)}</div>${prog}</div>
+ <div class="c"><h2>Stake calculator</h2><label>Odds</label><input id="odds" inputmode="decimal" placeholder="1.455" oninput="upd()">
+ <div id="out"></div><label>Stake (blank = recommended)</label><input id="stk" inputmode="decimal" oninput="upd()">
+ <div class="r"><button class="b" onclick="addp()">Add pending</button></div><div class="r" style="margin-top:8px">
+ <button class="b g" onclick="act('Win')">Win</button><button class="b l" onclick="act('Lost')">Lost</button><button class="b" onclick="act('Canceled')">Canceled</button></div></div>
+ <div class="c flex">${donut(w,l)}<div><h2>Win rate</h2><div class="m"><span class="g">${w} won</span>, <span class="l">${l} lost</span></div>
+ <div class="m">Total bets: ${S.set.hide?'hidden':S.bets.length} <a href="#" style="color:#d0d0d0" onclick="S.set.hide=!S.set.hide;save();render();return false">${S.set.hide?'show':'hide'}</a></div></div></div>
+ <div class="c"><h2>Recent bets</h2>${recent}</div>`}
+function upd(){const o=+($('#odds')||{}).value,r=rec(),el=$('#out');if(!el)return;
+ const s=+$('#stk').value||r.stake;
+ let h=`<div class="m">Active percentage ${f2(r.pct)}%${r.ls?' after '+r.ls+' loss'+(r.ls>1?'es':''):''}</div>`;
+ if(o>1)h+=`<div class="out"><div class="m">Stake<b>${f2(s)}</b></div><div class="m">Return<b>${f2(s*o)}</b></div><div class="m">Profit<b>${f2(s*(o-1))}</b></div></div>`;
+ else h+=`<div class="out"><div class="m">Stake<b>${f2(r.stake)}</b></div></div>`;
+ el.innerHTML=h}
+function read(){const o=+$('#odds').value,s=+$('#stk').value||rec().stake;
+ if(!(o>1)||!(s>0)){alert('Enter odds above 1 and a stake above 0.');return null}return{o,s}}
+function act(r){const x=read();if(!x)return;settle(x.o,x.s,r);render()}
+function addp(){const x=read();if(!x)return;S.pend.push({id:uid(),t:Date.now(),odds:x.o,stake:x.s});save();go('pend')}
+function bRow(b){return`<div class="row"><span>${dt(b.t)}<br><span class="m">odds ${b.odds} stake ${f2(b.stake)}</span></span><span style="text-align:right">${b.res}<br><span class="${cls(b.profit)}">${b.profit>0?'+':''}${f2(b.profit)}</span></span></div>`}
+function pend(){
+ return`<div class="c"><h2>Pending bets</h2>${S.pend.map(p=>`<div style="border-top:1px solid #333;padding:10px 0"><div>odds ${p.odds}, stake ${f2(p.stake)}</div><div class="m">${dt(p.t)}, return ${f2(p.stake*p.odds)}</div>
+ <div class="r" style="margin-top:8px"><button class="b g" onclick="res('${p.id}','Win')">Win</button><button class="b l" onclick="res('${p.id}','Lost')">Lost</button><button class="b" onclick="res('${p.id}','Canceled')">Canceled</button><button class="b" onclick="delp('${p.id}')">Remove</button></div></div>`).join('')||'<div class="m">No pending bets. Add one from the calculator on Home.</div>'}</div>`}
+function res(id,r){const p=S.pend.find(x=>x.id==id);S.pend=S.pend.filter(x=>x.id!=id);settle(p.odds,p.stake,r);render()}
+function delp(id){S.pend=S.pend.filter(x=>x.id!=id);save();render()}
+function rng(t){const a=F.from?new Date(F.from+'T00:00').getTime():0,b=F.to?new Date(F.to+'T23:59:59').getTime():1e15;return t>=a&&t<=b}
+function chart(pts,cps){
+ if(pts.length<2)return'<div class="m">Not enough data in this range.</div>';
+ const W=360,H=170,P=34,xs=pts.map(p=>p.t),ys=pts.map(p=>p.b).concat(cps.map(c=>c.amt));
+ const x0=Math.min(...xs),x1=Math.max(...xs)||1,y0=Math.min(...ys),y1=Math.max(...ys);
+ const X=t=>P+(x1==x0?0:(t-x0)/(x1-x0))*(W-P-6),Y=v=>H-14-(y1==y0?0:(v-y0)/(y1-y0))*(H-26);
+ let s=`<svg viewBox="0 0 ${W} ${H}" width="100%"><text x="2" y="${Y(y1)+3}">${Math.round(y1)}</text><text x="2" y="${Y(y0)+3}">${Math.round(y0)}</text>`;
+ cps.forEach(c=>s+=`<line x1="${P}" x2="${W-6}" y1="${Y(c.amt)}" y2="${Y(c.amt)}" stroke="#666" stroke-dasharray="3 3"/><text x="${W-6}" y="${Y(c.amt)-2}" text-anchor="end">${c.amt}</text>`);
+ s+=`<polyline fill="none" stroke="#d0d0d0" stroke-width="1.5" points="${pts.map(p=>X(p.t)+','+Y(p.b)).join(' ')}"/></svg>`;return s}
+function hist(){
+ const hs=S.hist.filter(h=>rng(h.t)),bs=[...S.bets].filter(b=>rng(b.t)).reverse();
+ const cps=sorted().filter(c=>{const v=hs.map(h=>h.b);return v.length&&c.amt<=Math.max(...v)*1.5&&c.amt>=Math.min(...v)*0.5});
+ const net=bs.reduce((a,b)=>a+b.profit,0);
+ return`<div class="c"><h2>Date range</h2><div class="r"><div><label>From</label><input type="date" value="${F.from}" onchange="F.from=this.value;render()"></div>
+ <div><label>To</label><input type="date" value="${F.to}" onchange="F.to=this.value;render()"></div></div></div>
+ <div class="c"><h2>Bankroll over time</h2>${chart(hs,[])}</div>
+ <div class="c"><h2>Progress toward checkpoints</h2>${chart(hs,cps)}</div>
+ <div class="c"><h2>Bets (${bs.length}), net <span class="${cls(net)}">${f2(net)}</span></h2>${bs.map(bRow).join('')||'<div class="m">No bets in this range.</div>'}</div>`}
+function setup(){
+ const e=S.cps.find(c=>c.id==editId)||{};
+ return`<div class="c"><h2>Current bankroll</h2><input id="bk" inputmode="decimal" value="${S.bank||''}"><button class="b" onclick="setb()">Set bankroll</button></div>
+ <div class="c"><h2>${editId?'Edit checkpoint':'New checkpoint'}</h2><label>Checkpoint amount</label><input id="ca" inputmode="decimal" value="${e.amt||''}">
+ <label>Stake percentage in this range (%)</label><input id="cp" inputmode="decimal" value="${e.pct||''}">
+ <label>Percentage decrease after every win (optional)</label><input id="cd" inputmode="decimal" value="${e.dec||''}">
+ <div class="r"><button class="b" onclick="savecp()">${editId?'Save checkpoint':'Add checkpoint'}</button>${editId?'<button class="b" onclick="editId=null;render()">Cancel</button>':''}</div></div>
+ <div class="c"><h2>Checkpoints</h2>${sorted().map(c=>`<div class="row"><span>${c.amt}<br><span class="m">${c.pct}% stake${c.dec?', -'+c.dec+' per win':''}</span></span>
+ <span><button class="b" onclick="editId='${c.id}';render()">Edit</button> <button class="b" onclick="delcp('${c.id}')">Delete</button></span></div>`).join('')||'<div class="m">No checkpoints yet.</div>'}</div>
+ <div class="c"><h2>Loss rules</h2><label>Default stake % (below the first checkpoint)</label><input id="sd" inputmode="decimal" value="${S.set.def}">
+ <label>Stake after 1 loss (% of normal stake)</label><input id="s1" inputmode="decimal" value="${S.set.l1}">
+ <label>Stake after 2 or more losses (% of normal stake)</label><input id="s2" inputmode="decimal" value="${S.set.l2}">
+ <button class="b" onclick="sets()">Save rules</button></div>
+ <div class="c"><h2>Data</h2><div class="r"><button class="b" onclick="exp()">Export backup</button><button class="b" onclick="reset()">Erase all data</button></div></div>`}
+function setb(){const v=+$('#bk').value;if(!(v>=0))return;S.bank=v;S.hist.push({t:Date.now(),b:v});save();alert('Bankroll saved.');render()}
+function savecp(){const a=+$('#ca').value,p=+$('#cp').value,d=+$('#cd').value||0;
+ if(!(a>0)||!(p>0)){alert('Enter an amount and a stake percentage.');return}
+ if(editId){Object.assign(S.cps.find(c=>c.id==editId),{amt:a,pct:p,dec:d});editId=null}else S.cps.push({id:uid(),amt:a,pct:p,dec:d});save();render()}
+function delcp(id){if(confirm('Delete this checkpoint?')){S.cps=S.cps.filter(c=>c.id!=id);save();render()}}
+function sets(){S.set.def=+$('#sd').value||5;S.set.l1=+$('#s1').value||25;S.set.l2=+$('#s2').value||20;save();alert('Rules saved.')}
+function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='bankroll-backup.json';a.click()}
+function reset(){if(confirm('Erase all data? This cannot be undone.')){localStorage.removeItem(K);location.reload()}}
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
